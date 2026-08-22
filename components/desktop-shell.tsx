@@ -4504,7 +4504,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
                                               : "icon-glyph"
                                         }
                                       />
-                                    ) : customIconUrl ? null : (
+                                    ) : iconImageUrl ? null : (
                                       <CustomAppGlyph seed={customApp?.name || icon.label} className="icon-glyph" />
                                     )}
                                     {badgeCount > 0 ? (
@@ -4644,7 +4644,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
                                     : "icon-glyph"
                               }
                             />
-                          ) : customIconUrl ? null : (
+                          ) : iconImageUrl ? null : (
                             <CustomAppGlyph seed={customApp?.name || icon.label} className="icon-glyph" />
                           )}
                         </span>
@@ -4841,7 +4841,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
                                         id={memberBuiltinId}
                                         className={memberSkinUrl ? "icon-glyph icon-glyph-hidden" : "icon-glyph"}
                                       />
-                                    ) : memberCustomUrl ? null : (
+                                    ) : memberImageUrl ? null : (
                                       <CustomAppGlyph seed={memberCustomApp?.name || ""} className="icon-glyph" />
                                     )}
                                     {memberBadge > 0 ? (
