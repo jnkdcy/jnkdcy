@@ -103,7 +103,7 @@ class ChatPluginRuntime {
 
     private async ensurePresetPluginsInstalled(): Promise<void> {
         if (typeof window === "undefined") return;
-        const FLAG_KEY = "preset_xiaohongshu_installed_v1.0";
+        const FLAG_KEY = "preset_xiaohongshu_installed_v1.1";
         if (kvGet(FLAG_KEY) === "1") return;
 
         try {

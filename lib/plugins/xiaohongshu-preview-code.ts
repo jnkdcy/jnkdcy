@@ -3,7 +3,7 @@ export const XIAOHONGSHU_PREVIEW_CODE = `export default {
     id: "xiaohongshu-preview",
     name: "小红书分享卡片与AI读图",
     apiVersion: 1,
-    version: "1.0.0",
+    version: "1.1.0",
     author: "小坊",
     description: "发送小红书链接，自动渲染为精美分享卡片，并提取笔记标题、正文及所有配图（base64）发给 AI 供其阅读。",
     settings: [
@@ -265,7 +265,7 @@ export const XIAOHONGSHU_PREVIEW_CODE = `export default {
     }
 
     // 2. 拦截并处理用户发来的消息
-    const XHS_REGEX = /https?:\/\/(?:www\.)?xiaohongshu\.com\/(?:discovery\/item|explore)\/([a-zA-Z0-9_]+)|https?:\/\/xhslink\.(?:com|cn)\/([a-zA-Z0-9_]+)/i;
+    const XHS_REGEX = /https?:\/\/(?:www\.)?xiaohongshu\.com\/(?:discovery\/item|explore)\/[a-zA-Z0-9_]+|https?:\/\/xhslink\.(?:com|cn)\/(?:[a-zA-Z0-9_]+\/)*[a-zA-Z0-9_]+/i;
 
     ctx.hooks.transform("user.beforeSend", (payload) => {
       const text = payload.text;
@@ -285,11 +285,15 @@ export const XIAOHONGSHU_PREVIEW_CODE = `export default {
       const matchedUrl = match[0];
       payload.cancelled = true; // 拦截原生发送，转为自定义卡片发送
 
+      // 提取前后的文字，避免丢弃用户想发给AI的其他话
+      const extraText = text.replace(matchedUrl, "").trim();
+      const contentText = "[小红书链接预览] " + matchedUrl + (extraText ? "\n" + extraText : "");
+
       // 预先插入 loading 自定义卡片消息
       const newMsg = ctx.data.messages.push({
         sessionId: payload.sessionId,
         role: "user",
-        content: "[小红书链接预览] " + matchedUrl,
+        content: contentText,
         mediaType: "plugin:xhs-card",
         mediaData: {
           status: "loading",
@@ -462,8 +466,11 @@ export const XIAOHONGSHU_PREVIEW_CODE = `export default {
         if (msg.role !== "user" || typeof msg.content !== "string") continue;
 
         // 根据我们标志性的字符串识别小红书预览卡片
-        if (msg.content.startsWith("[小红书链接预览] ")) {
-          const matchedUrl = msg.content.replace("[小红书链接预览] ", "").trim();
+        if (msg.content.includes("[小红书链接预览] ")) {
+          const lines = msg.content.split("\n");
+          const firstLine = lines[0];
+          const matchedUrl = firstLine.replace("[小红书链接预览] ", "").trim();
+          const extraText = lines.slice(1).join("\n").trim();
           
           // 从消息列表里寻找对应的 loaded 卡片数据
           const chatMsgs = ctx.data.messages.list(sessionId);
@@ -474,7 +481,8 @@ export const XIAOHONGSHU_PREVIEW_CODE = `export default {
             const note = data.note || {};
             const enableVision = ctx.system.settings.get("enableAiVision") !== false;
 
-            const textContent = "[用户分享的小红书笔记]\\n" +
+            const textContent = (extraText ? extraText + "\\n\\n" : "") +
+              "[用户分享的小红书笔记]\\n" +
               "标题: " + (note.title || "无标题") + "\\n" +
               "作者: " + (note.author || "未知") + "\\n" +
               "正文内容: " + (note.desc || "无内容") + "\\n" +
