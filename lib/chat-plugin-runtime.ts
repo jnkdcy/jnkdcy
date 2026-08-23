@@ -101,8 +101,44 @@ class ChatPluginRuntime {
 
     activePluginIds(): string[] { return [...this.active.keys()]; }
 
+    private async ensurePresetPluginsInstalled(): Promise<void> {
+        if (typeof window === "undefined") return;
+        const FLAG_KEY = "preset_xiaohongshu_installed_v1.0";
+        if (kvGet(FLAG_KEY) === "1") return;
+
+        try {
+            const { XIAOHONGSHU_PREVIEW_CODE } = await import("./plugins/xiaohongshu-preview-code");
+            const { installChatPluginFromCode } = await import("./chat-plugin-loader");
+            const res = await installChatPluginFromCode(XIAOHONGSHU_PREVIEW_CODE);
+            if (res.ok) {
+                kvSet(FLAG_KEY, "1");
+                recordChatPluginLog({
+                    pluginId: "xiaohongshu-preview",
+                    where: "runtime",
+                    message: "内置小红书分享卡片与AI读图插件预装激活成功",
+                    level: "info",
+                });
+            } else {
+                recordChatPluginLog({
+                    pluginId: "xiaohongshu-preview",
+                    where: "runtime",
+                    message: `内置小红书插件预装失败: ${res.error || "未知原因"}`,
+                    level: "error",
+                });
+            }
+        } catch (e) {
+            recordChatPluginLog({
+                pluginId: "xiaohongshu-preview",
+                where: "runtime",
+                message: `内置小红书插件预装异常: ${e instanceof Error ? e.message : String(e)}`,
+                level: "error",
+            });
+        }
+    }
+
     private async start(): Promise<void> {
         await Promise.allSettled([hydrateKvDb(), hydrateChatStorage()]);
+        await this.ensurePresetPluginsInstalled();
 
         if (isChatPluginSafeMode()) {
             recordChatPluginLog({ pluginId: "*", where: "runtime", message: "安全模式：已跳过全部插件加载", level: "info" });
