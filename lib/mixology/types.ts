@@ -5,10 +5,11 @@
 // 各挑一件调成「特调」，特调可命名保存/分享。对局 = 角色卡 + 特调的一次运行。
 // 本文件只定义数据形状，装配见 assembler.ts，存取见 storage.ts。
 
-/** 材料十类（槽位一一对应） */
+/** 材料种类（槽位一一对应） */
 export type MixMaterialKind =
     | "character" // 角色卡
     | "persona"   // 面具：用户人设（{{user}} 的名字与设定）
+    | "preface"   // 序言：提示词最顶上的开场说明（择一；不配则没有这一段）
     | "base"      // 基底：扮演总纲
     | "flavor"    // 风味：文风
     | "glass"     // 杯型：输出格式
@@ -22,6 +23,7 @@ export type MixMaterialKind =
 export const MIX_KIND_LABELS: Record<MixMaterialKind, string> = {
     character: "角色卡",
     persona: "面具",
+    preface: "序言",
     base: "基底",
     flavor: "风味",
     glass: "杯型",
@@ -35,13 +37,14 @@ export const MIX_KIND_LABELS: Record<MixMaterialKind, string> = {
 
 /** 吧台槽位顺序（角色卡永远第一槽） */
 export const MIX_SLOT_ORDER: MixMaterialKind[] = [
-    "character", "persona", "base", "flavor", "glass", "strength", "ticket", "garnish", "encore", "filter", "mechanism",
+    "character", "persona", "preface", "base", "flavor", "glass", "strength", "ticket", "garnish", "encore", "filter", "mechanism",
 ];
 
 /** TAB 上大字下面那行小字：说明这一类到底干什么（不进提示词的种类标它的实际职责） */
 export const MIX_KIND_SECTION_LABELS: Record<MixMaterialKind, string> = {
     character: "角色资料",
     persona: "用户资料",
+    preface: "开场说明",
     base: "扮演总纲",
     flavor: "文风",
     glass: "正文输出要求",
@@ -65,6 +68,7 @@ export const MIX_REQUIRED_KINDS: MixMaterialKind[] = ["character"];
 export const MIX_SLOT_STACK: Record<MixMaterialKind, "concat" | "first"> = {
     character: "first",
     persona: "first",
+    preface: "first",
     base: "concat",
     flavor: "concat",
     glass: "concat",
@@ -76,8 +80,8 @@ export const MIX_SLOT_STACK: Record<MixMaterialKind, "concat" | "first"> = {
     mechanism: "concat",
 };
 
-/** 不给设生效条件的格：这两格没了这一局就不成立 */
-export const MIX_NO_CONDITION_KINDS: MixMaterialKind[] = ["character", "persona"];
+/** 不给设生效条件的格：择一型的格不吃条件（角色卡/面具没了这一局就不成立，序言恒在顶端） */
+export const MIX_NO_CONDITION_KINDS: MixMaterialKind[] = ["character", "persona", "preface"];
 
 /**
  * 会在下载方设备上「按轮执行、且能改写对话」的材料。
@@ -194,10 +198,41 @@ export type MixCharacterCard = MixMaterialMeta & {
     authorNote?: string;
 };
 
-/** 纯文本类材料：基底 / 风味 / 杯型 / 苦精 */
+/** 可由序言材料覆写标题的提示词分段 */
+export type MixSectionTitleKey =
+    | "base"      // 扮演总纲
+    | "character" // 角色资料
+    | "persona"   // 用户资料
+    | "world"     // 世界与剧情
+    | "flavor"    // 文风
+    | "glass"     // 正文输出要求
+    | "ticket"    // 状态栏
+    | "encore"    // 小剧场
+    | "examples"  // 示例对话
+    | "checklist"; // 输出格式检查
+
+/** 各分段的默认标题（编辑器占位符与装配器共用，逐字即历史版本的标题） */
+export const MIX_SECTION_TITLE_DEFAULTS: Record<MixSectionTitleKey, string> = {
+    base: "扮演总纲",
+    character: "角色资料",
+    persona: "用户资料",
+    world: "世界与剧情",
+    flavor: "文风",
+    glass: "正文输出要求",
+    ticket: "状态栏",
+    encore: "小剧场",
+    examples: "示例对话",
+    checklist: "输出格式检查",
+};
+
+/** 纯文本类材料：序言 / 基底 / 风味 / 杯型 / 苦精 */
 export type MixTextMaterial = MixMaterialMeta & {
-    kind: "base" | "flavor" | "glass" | "strength";
+    kind: "preface" | "base" | "flavor" | "glass" | "strength";
     content: string;
+    /** 仅序言使用：自定义各分段标题（可用 {{char}}/{{user}} 宏），让整份提示词
+     *  的措辞跟上序言定下的基调。缺省/留空的键用默认标题；交叉引用（如输出
+     *  格式检查里提到的段名）会跟着换。 */
+    sectionTitles?: Partial<Record<MixSectionTitleKey, string>>;
 };
 
 /** 面具（用户人设）：{{user}} 是谁——名字 + 人设正文，装配成「用户资料」段 */
@@ -589,6 +624,13 @@ export type MixTurn = {
     role: "user" | "assistant";
     /** 正文（assistant 侧已剥离小票块） */
     text: string;
+    /**
+     * 这一轮的原始输出（assistant 侧）：进剥离/滤网/机括之前的完整原文，
+     * 含机括标记行与被滤网洗掉的字；状态栏补写的块也并在里面（它算这一轮产出的一部分）。
+     * 「编辑原始输出」展示并回写的就是这一份；老数据没有这个字段，
+     * 编辑时退回用产物拼装（mixTurnRawText 的兜底路径）。
+     */
+    rawText?: string;
     /** 该轮小票壳内原文（有小票材料且 AI 按契约输出时才有）；多块时为第一块，全量见 ticketRaws */
     ticketRaw?: string;
     /** 该轮小剧场壳内原文（尾调写了契约且 AI 输出时才有）；多块时为第一块，全量见 encoreRaws */
@@ -613,6 +655,22 @@ export type MixTurn = {
      * 直接取剩下最后一轮的这份快照还原，数字不会停留在被丢掉的未来。
      */
     state?: MixState;
+    /**
+     * 这一轮结束时的机括存储（与 state 同一套语义，只在 assistant 轮上）。
+     * 有它才谈得上"干净回溯"：机括存储是任意可读写的，不像 turns 那样只增不改，
+     * 砍掉几轮推不出过去的样子，只能当时拍照留档。
+     *
+     * 只留最近 MIX_STORE_SNAPSHOT_TURNS 轮（见 engine.ts）——存储桶单件上限 100KB，
+     * 逐轮全留会把对局存档撑爆。窗口外的回溯退到现存最早的那份；老对局没有这个
+     * 字段，回溯时维持现状，绝不清空。
+     */
+    mechanismStore?: Record<string, Record<string, string>>;
+    /**
+     * 玩家在机括面板里手改过的桶（materialId → 桶），记在手改发生的那一轮上。
+     * 编辑早先某一轮后要把后面每一轮按原文重画一遍，重画走到这一轮时会拿它再盖一次：
+     * 手改是玩家亲手定的事实，永远压过重画算出来的结果。
+     */
+    mechanismStoreEdits?: Record<string, Record<string, string>>;
     createdAt: number;
 };
 
@@ -637,6 +695,14 @@ export type MixSession = {
      * 需要的话机括可以自己发现轮数倒退并复位。
      */
     mechanismStore?: Record<string, Record<string, string>>;
+    /**
+     * 最后一轮出杯后钩子跑之前的机括存储快照 + 它属于哪一轮。
+     * 编辑原始输出后的「替换重跑」靠它：先回到这轮记账前的底稿再重跑一次钩子，
+     * 原来那笔账自然作废，反复编辑反复同步也只记一笔。只留最后一轮——
+     * 编辑角色回复本来就会把之后的轮全部截掉，编辑完它一定是最后一轮。
+     */
+    mechanismStorePrev?: Record<string, Record<string, string>>;
+    mechanismStorePrevTurn?: string;
     /**
      * 玩家自己拖动/缩放过的面板位置（materialId → 摆放），只在这一局有效。
      * 不写回材料：材料是作者的作品，玩家挪一下自己的屏幕不该改到别人的作品。
